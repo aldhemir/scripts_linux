@@ -1,8 +1,3 @@
-Com certeza! Abaixo está o arquivo **README.md** completo, estruturado profissionalmente. Ele contém a documentação de todos os scripts que modernizamos, instruções de uso, requisitos e tabela de funcionalidades.
-
-Você pode copiar o código abaixo, salvar como `README.md` na raiz do seu repositório no GitHub/GitLab.
-
-```markdown
 # 🐧 Linux Automation Suite (2025 Edition)
 
 <div align="center">
