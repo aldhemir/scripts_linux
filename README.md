@@ -1,4 +1,4 @@
-# 🐧 Linux Automation Suite (2025 Edition)
+# 🐧 Linux Automation Suite
 
 <div align="center">
 
@@ -31,10 +31,10 @@ Para utilizar qualquer script desta suíte, clone o repositório e dê permissã
 
 ```bash
 # 1. Clone o repositório
-git clone [https://github.com/seu-usuario/linux-automation.git](https://github.com/seu-usuario/linux-automation.git)
+git clone [gh repo clone aldhemir/scripts_linux](https://github.com/aldhemir/scripts_linux.git)
 
 # 2. Entre na pasta
-cd linux-automation
+cd scripts_linux
 
 # 3. Dê permissão de execução para todos os scripts
 chmod +x *.sh
@@ -177,7 +177,3 @@ Este projeto está licenciado sob a licença MIT - sinta-se livre para modificar
 <p align="center">
 <sub>Desenvolvido com ❤️ e Shell Script</sub>
 </p>
-
-```
-
-```# scripts_linux
