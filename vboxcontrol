@@ -1,0 +1,178 @@
+#!/bin/bash
+# VBox Manager Pro - Solução Única para VMs no Boot
+# Atualizado: 2025/2026
+# Funcionalidade: Instala o serviço Systemd automaticamente e gerencia as VMs.
+
+# --- Configurações ---
+CONFIG_DIR="/etc/virtualbox"
+LIST_FILE="$CONFIG_DIR/machines_enabled"
+SERVICE_PATH="/etc/systemd/system/vbox@.service"
+
+# --- Cores ---
+VERDE="\033[1;32m"
+VERMELHO="\033[1;31m"
+AZUL="\033[1;34m"
+AMARELO="\033[1;33m"
+NORMAL="\033[m"
+
+# --- Verificação de Root ---
+if [[ $EUID -ne 0 ]]; then
+   echo -e "${VERMELHO}Este script precisa ser executado como root.${NORMAL}"
+   echo -e "Use: ${VERDE}sudo $0${NORMAL}"
+   exit 1
+fi
+
+# --- Função: Instalar/Configurar o Serviço Systemd ---
+verificar_instalacao() {
+    # Se o arquivo de serviço já existe, pula esta etapa
+    if [ -f "$SERVICE_PATH" ]; then
+        return
+    fi
+
+    clear
+    echo -e "${AZUL}>>> Configuração Inicial Detectada${NORMAL}"
+    echo -e "O serviço do systemd ainda não existe. Vamos criar agora."
+    echo
+    echo -e "${AMARELO}Passo 1: Qual usuário Linux é o DONO das VMs?${NORMAL}"
+    echo "Exemplo: seu nome de usuário (aldhemir, ubuntu, etc)."
+    read -p "Usuário: " VM_USER
+
+    # Verifica se usuário existe
+    if ! id "$VM_USER" &>/dev/null; then
+        echo -e "${VERMELHO}Erro: Usuário '$VM_USER' não encontrado no sistema.${NORMAL}"
+        exit 1
+    fi
+
+    echo -e "${AZUL}>>> Criando arquivo de serviço em $SERVICE_PATH ...${NORMAL}"
+    
+    # Cria o arquivo de serviço dinamicamente
+    cat > "$SERVICE_PATH" <<EOF
+[Unit]
+Description=VirtualBox VM Service: %i
+After=network.target virtualbox.service
+Requires=virtualbox.service
+
+[Service]
+User=$VM_USER
+Group=$VM_USER
+Type=forking
+Restart=no
+TimeoutSec=5min
+# Inicia em modo Headless (sem janela)
+ExecStart=/usr/bin/VBoxManage startvm "%i" --type headless
+# Salva o estado ao desligar o PC
+ExecStop=/usr/bin/VBoxManage controlvm "%i" savestate
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    # Cria diretório de configuração se não existir
+    mkdir -p "$CONFIG_DIR"
+    touch "$LIST_FILE"
+
+    # Recarrega o systemd
+    systemctl daemon-reload
+    echo -e "${VERDE}>>> Instalação do serviço concluída!${NORMAL}"
+    echo
+    sleep 2
+}
+
+# --- Função: Editar Lista de VMs ---
+editar_lista() {
+    echo -e "${AZUL}>>> Editando lista de VMs ($LIST_FILE)...${NORMAL}"
+    echo -e "Adicione o NOME EXATO da VM, um por linha."
+    echo -e "Para sair do editor, use Ctrl+O (Salvar), Enter, e Ctrl+X (Sair)."
+    echo
+    read -n1 -p "Pressione qualquer tecla para abrir o editor..."
+    nano "$LIST_FILE"
+}
+
+# --- Função: Gerenciar (Start/Stop/Status) ---
+gerenciar() {
+    ACAO=$1
+    
+    if [ ! -s "$LIST_FILE" ]; then
+        echo -e "${VERMELHO}A lista de VMs está vazia!${NORMAL}"
+        echo "Use a opção 'edit' para adicionar VMs."
+        return
+    fi
+
+    echo -e "${AZUL}>>> Executando $ACAO para as VMs listadas...${NORMAL}"
+
+    while read -r VM_NAME; do
+        # Pula linhas vazias ou comentários
+        [[ -z "$VM_NAME" || "$VM_NAME" =~ ^# ]] && continue
+
+        # Escapa caracteres especiais para o systemd (ex: espaços viram \x20)
+        SYSTEMD_NAME="vbox@$(systemd-escape "$VM_NAME")"
+
+        case $ACAO in
+            start)
+                echo -n "Iniciando '$VM_NAME'... "
+                systemctl start "$SYSTEMD_NAME" && echo -e "${VERDE}OK${NORMAL}" || echo -e "${VERMELHO}ERRO${NORMAL}"
+                ;;
+            stop)
+                echo -n "Parando (Salvando) '$VM_NAME'... "
+                systemctl stop "$SYSTEMD_NAME" && echo -e "${VERDE}OK${NORMAL}" || echo -e "${VERMELHO}ERRO${NORMAL}"
+                ;;
+            enable)
+                echo -n "Ativando Boot Automático para '$VM_NAME'... "
+                systemctl enable "$SYSTEMD_NAME" &>/dev/null && echo -e "${VERDE}OK${NORMAL}" || echo -e "${VERMELHO}ERRO${NORMAL}"
+                ;;
+            disable)
+                echo -n "Removendo do Boot '$VM_NAME'... "
+                systemctl disable "$SYSTEMD_NAME" &>/dev/null && echo -e "${VERDE}OK${NORMAL}" || echo -e "${VERMELHO}ERRO${NORMAL}"
+                ;;
+            status)
+                echo -e "${AMARELO}Status de '$VM_NAME':${NORMAL}"
+                systemctl status "$SYSTEMD_NAME" --no-pager | grep "Active:"
+                echo "--------------------------------"
+                ;;
+        esac
+    done < "$LIST_FILE"
+}
+
+# --- Menu Principal ---
+verificar_instalacao
+
+case "$1" in
+    start)
+        gerenciar start
+        ;;
+    stop)
+        gerenciar stop
+        ;;
+    restart)
+        gerenciar stop
+        sleep 2
+        gerenciar start
+        ;;
+    status)
+        gerenciar status
+        ;;
+    edit)
+        editar_lista
+        ;;
+    enable-boot)
+        gerenciar enable
+        echo -e "${VERDE}As VMs da lista iniciarão automaticamente quando o PC ligar.${NORMAL}"
+        ;;
+    disable-boot)
+        gerenciar disable
+        echo -e "${AMARELO}Boot automático desativado para as VMs da lista.${NORMAL}"
+        ;;
+    *)
+        clear
+        echo -e "${AZUL}=== VBOX MANAGER PRO ===${NORMAL}"
+        echo "Uso: sudo $0 {comando}"
+        echo
+        echo -e "  ${VERDE}edit${NORMAL}         -> Adicionar/Remover VMs da lista"
+        echo -e "  ${VERDE}start${NORMAL}        -> Iniciar todas as VMs da lista agora"
+        echo -e "  ${VERDE}stop${NORMAL}         -> Parar (Salvar Estado) todas as VMs"
+        echo -e "  ${VERDE}status${NORMAL}       -> Ver se estão rodando"
+        echo -e "  ${VERDE}enable-boot${NORMAL}  -> Configurar para ligar junto com o PC"
+        echo -e "  ${VERDE}disable-boot${NORMAL} -> Remover inicialização automática"
+        echo
+        exit 1
+esac
